@@ -14,6 +14,7 @@ Currently recognizes **English** (`[ALL]` / `[CT]` / `[T]`) and **German** (`[AL
 ## Quick start
 
 1. Download the binary for your platform from the [Releases](https://github.com/Klausiiiii/CS2-Chat-Translator/releases) page — or build it yourself (see below).
+   - On Linux, mark the downloaded file executable: `chmod +x CS2ChatTranslator.Avalonia`
 2. Launch CS2 with the **`-condebug`** launch option so the game writes `console.log`.
 3. Run the app.
 4. Open **Datei → Einstellungen…**:
