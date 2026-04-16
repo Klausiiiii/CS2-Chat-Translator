@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/CS2ChatTranslator.Core/CS2ChatTranslator.Core.csproj" />
     <Project Path="src/CS2ChatTranslator/CS2ChatTranslator.csproj" />
+    <Project Path="src/CS2ChatTranslator.Avalonia/CS2ChatTranslator.Avalonia.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CS2ChatTranslator.Tests/CS2ChatTranslator.Tests.csproj" />

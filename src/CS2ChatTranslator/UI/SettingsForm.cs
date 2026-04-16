@@ -1,4 +1,5 @@
 using CS2ChatTranslator.Models;
+using CS2ChatTranslator.Services;
 
 namespace CS2ChatTranslator.UI;
 
@@ -134,16 +135,9 @@ public sealed class SettingsForm : Form
 
     private string GuessInitialDirectory()
     {
-        string[] candidates =
-        [
-            @"C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo",
-            @"C:\Program Files\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo",
-            @"D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo"
-        ];
-        foreach (var c in candidates)
-        {
-            if (Directory.Exists(c)) return c;
-        }
+        var found = SteamPaths.FindExistingCsgoDirectory();
+        if (found is not null) return found;
+
         if (!string.IsNullOrWhiteSpace(_pathBox.Text))
         {
             var dir = Path.GetDirectoryName(_pathBox.Text);

@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CS2ChatTranslator.Views.SettingsWindow"
+        Title="Einstellungen"
+        Width="540" Height="220"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto" ColumnDefinitions="120,*,Auto">
+    <TextBlock Grid.Row="0" Grid.Column="0"
+               Text="Zielsprache:" VerticalAlignment="Center" Margin="0,0,0,12" />
+    <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+              Name="LangBox" HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+
+    <TextBlock Grid.Row="1" Grid.Column="0"
+               Text="console.log:" VerticalAlignment="Center" Margin="0,0,0,12" />
+    <TextBox Grid.Row="1" Grid.Column="1"
+             Name="PathBox" IsReadOnly="True" Margin="0,0,8,12" />
+    <Button Grid.Row="1" Grid.Column="2"
+            Name="BrowseBtn" Content="Durchsuchen…" Margin="0,0,0,12" />
+
+    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="CS2 mit Startparameter -condebug starten, damit die Datei erzeugt wird."
+               Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+    <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="OkBtn" Content="OK" IsDefault="True" MinWidth="80" />
+      <Button Name="CancelBtn" Content="Abbrechen" IsCancel="True" MinWidth="80" />
+    </StackPanel>
+  </Grid>
+</Window>

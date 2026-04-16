@@ -1,6 +1,6 @@
 # CS2 Chat Translator
 
-A small Windows desktop tool that reads Counter-Strike 2's in-game chat and translates foreign-language messages into your language in real time — in a separate window, with both original text and translation visible.
+A small desktop tool that reads Counter-Strike 2's in-game chat and translates foreign-language messages into your language in real time — in a separate window, with both original text and translation visible.
 
 ## What it does
 
@@ -13,20 +13,33 @@ Currently recognizes **English** (`[ALL]` / `[CT]` / `[T]`) and **German** (`[AL
 
 ## Quick start
 
-1. Download `CS2ChatTranslator.exe` from the [Releases](https://github.com/Klausiiiii/CS2-Chat-Translator/releases) page — or build it yourself (see below).
+1. Download the binary for your platform from the [Releases](https://github.com/Klausiiiii/CS2-Chat-Translator/releases) page — or build it yourself (see below).
 2. Launch CS2 with the **`-condebug`** launch option so the game writes `console.log`.
-3. Run `CS2ChatTranslator.exe`.
+3. Run the app.
 4. Open **Datei → Einstellungen…**:
    - Pick your target language.
-   - **Durchsuchen…** to your `console.log`. It's usually at:
-     `...\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\console.log`
+   - **Durchsuchen…** to your `console.log`. Typical locations:
+     - Windows: `...\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\console.log`
+     - Linux:   `~/.local/share/Steam/steamapps/common/Counter-Strike Global Offensive/game/csgo/console.log`
 5. Click **OK**. Chat messages from your matches now appear in the window translated.
 
-Your settings live in `%APPDATA%\CS2ChatTranslator\config.json` and persist across launches.
+Settings persist across launches:
+- Windows: `%APPDATA%\CS2ChatTranslator\config.json`
+- Linux:   `~/.config/CS2ChatTranslator/config.json`
+
+## Platforms
+
+| Platform | UI frontend    | Project                              |
+|----------|----------------|--------------------------------------|
+| Windows  | WinForms       | `src/CS2ChatTranslator/`             |
+| Windows  | Avalonia       | `src/CS2ChatTranslator.Avalonia/`    |
+| Linux    | Avalonia       | `src/CS2ChatTranslator.Avalonia/`    |
+
+The WinForms build is the original / canonical Windows binary. The Avalonia build runs on both Linux and Windows and shares the same services/parser code via `CS2ChatTranslator.Core`.
 
 ## Known limitations
 
-- **Windows x64 only** — no macOS, no Linux, no ARM.
+- x64 only — no ARM builds shipped.
 - Needs an internet connection (Google Translate).
 - Unsigned binary — Windows SmartScreen / Defender may warn on first launch. Click "More info → Run anyway" or whitelist it.
 - Only the 500 most recent messages are kept in the feed; older ones scroll out.
@@ -34,7 +47,7 @@ Your settings live in `%APPDATA%\CS2ChatTranslator\config.json` and persist acro
 
 ## Build from source
 
-Requires the **.NET 10 SDK** on Windows.
+Requires the **.NET 10 SDK**.
 
 ```bash
 git clone https://github.com/Klausiiiii/CS2-Chat-Translator.git
@@ -43,13 +56,19 @@ dotnet build
 dotnet test
 ```
 
-Run from source without building an `.exe`:
+Run from source without building a binary:
 
 ```bash
+# Windows WinForms
 dotnet run --project src/CS2ChatTranslator
+
+# Windows / Linux Avalonia
+dotnet run --project src/CS2ChatTranslator.Avalonia
 ```
 
-Publish a self-contained single-file `.exe` (~51 MB, no .NET runtime needed on the target machine):
+### Publish a self-contained binary
+
+Windows WinForms (~51 MB, no .NET runtime needed on the target machine):
 
 ```bash
 dotnet publish src/CS2ChatTranslator/CS2ChatTranslator.csproj \
@@ -57,11 +76,35 @@ dotnet publish src/CS2ChatTranslator/CS2ChatTranslator.csproj \
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
   -p:EnableCompressionInSingleFile=true \
-  -o out/
+  -o out/win-winforms/
+```
+
+Linux Avalonia:
+
+```bash
+dotnet publish src/CS2ChatTranslator.Avalonia/CS2ChatTranslator.Avalonia.csproj \
+  -c Release -r linux-x64 --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:EnableCompressionInSingleFile=true \
+  -o out/linux/
+```
+
+Windows Avalonia (same command, different RID):
+
+```bash
+dotnet publish src/CS2ChatTranslator.Avalonia/CS2ChatTranslator.Avalonia.csproj \
+  -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:EnableCompressionInSingleFile=true \
+  -o out/win-avalonia/
 ```
 
 ## Project layout
 
-- `src/CS2ChatTranslator/` — WinForms app (.NET 10, C#).
-- `tests/CS2ChatTranslator.Tests/` — xUnit tests, incl. a regression test that parses a real CS2 log excerpt.
+- `src/CS2ChatTranslator.Core/` — shared library: log tailer, chat parser, translator, config store, Steam path helper. Cross-platform (`net10.0`).
+- `src/CS2ChatTranslator/` — WinForms Windows app (`net10.0-windows`).
+- `src/CS2ChatTranslator.Avalonia/` — Avalonia cross-platform app (`net10.0`), runs on Linux and Windows.
+- `tests/CS2ChatTranslator.Tests/` — xUnit tests against Core, incl. a regression test that parses a real CS2 log excerpt.
 - `CLAUDE.md` — architecture notes and parser gotchas for contributors.
