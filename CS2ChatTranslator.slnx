@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CS2ChatTranslator/CS2ChatTranslator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CS2ChatTranslator.Tests/CS2ChatTranslator.Tests.csproj" />
+  </Folder>
+</Solution>
