@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CS2ChatTranslator.Models;
 using CS2ChatTranslator.Services;
 
@@ -6,6 +7,11 @@ namespace CS2ChatTranslator.UI;
 public partial class MainForm : Form
 {
     private const int MaxMessages = 500;
+    private const int RenderCoalesceMs = 50;
+
+    [DllImport("user32.dll")]
+    private static extern int SendMessage(IntPtr hWnd, int wMsg, IntPtr wParam, IntPtr lParam);
+    private const int WM_SETREDRAW = 0x000B;
 
     private AppConfig _config = new();
     private ConsoleLogTailer? _tailer;
@@ -14,6 +20,8 @@ public partial class MainForm : Form
     private int _chatFound;
     private int _translated;
     private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 500 };
+    private readonly System.Windows.Forms.Timer _renderTimer = new() { Interval = RenderCoalesceMs };
+    private bool _renderPending;
 
     public MainForm()
     {
@@ -21,6 +29,12 @@ public partial class MainForm : Form
         Load += (_, _) => OnLoadAsync();
         _statusTimer.Tick += (_, _) => UpdateStatus();
         _statusTimer.Start();
+        _renderTimer.Tick += (_, _) =>
+        {
+            _renderTimer.Stop();
+            _renderPending = false;
+            Render();
+        };
     }
 
     private void OnLoadAsync()
@@ -59,7 +73,7 @@ public partial class MainForm : Form
 
         try
         {
-            _tailer = new ConsoleLogTailer(_config.ConsoleLogPath, startFromBeginning: true);
+            _tailer = new ConsoleLogTailer(_config.ConsoleLogPath, startFromBeginning: false);
             _tailer.LineRead += OnLineRead;
             _tailer.ErrorOccurred += OnTailerError;
             _tailer.Start();
@@ -92,7 +106,7 @@ public partial class MainForm : Form
         {
             _messages.RemoveRange(0, _messages.Count - MaxMessages);
         }
-        Render();
+        ScheduleRender();
 
         try
         {
@@ -107,7 +121,14 @@ public partial class MainForm : Form
             msg.TranslationFailed = true;
         }
 
-        if (IsHandleCreated) Render();
+        if (IsHandleCreated) ScheduleRender();
+    }
+
+    private void ScheduleRender()
+    {
+        if (_renderPending) return;
+        _renderPending = true;
+        _renderTimer.Start();
     }
 
     private void OnOpenSettings()
@@ -134,43 +155,49 @@ public partial class MainForm : Form
     {
         var atBottom = IsScrolledToBottom();
 
-        _chatBox.SuspendLayout();
-        _chatBox.Clear();
-
-        foreach (var m in _messages)
+        SendMessage(_chatBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        try
         {
-            var (tag, color) = m.Type switch
-            {
-                ChatType.CT => ("[CT]",  Color.CornflowerBlue),
-                ChatType.T  => ("[T]",   Color.Gold),
-                _           => ("[ALL]", Color.LightGray)
-            };
+            _chatBox.Clear();
 
-            AppendColored(tag + " ", color, FontStyle.Bold);
-            AppendColored(m.Player, Color.White, FontStyle.Bold);
-            if (m.IsDead) AppendColored(" [TOT]", Color.IndianRed, FontStyle.Bold);
-            if (!string.IsNullOrEmpty(m.Callout))
-                AppendColored(" @" + m.Callout, Color.MediumPurple, FontStyle.Italic);
-            AppendColored(": ", Color.White, FontStyle.Bold);
-            AppendColored(m.Original + "\n", Color.Gainsboro, FontStyle.Regular);
+            foreach (var m in _messages)
+            {
+                var (tag, color) = m.Type switch
+                {
+                    ChatType.CT => ("[CT]",  Color.CornflowerBlue),
+                    ChatType.T  => ("[T]",   Color.Gold),
+                    _           => ("[ALL]", Color.LightGray)
+                };
 
-            AppendColored("      → ", Color.DimGray, FontStyle.Regular);
-            if (m.Translation is null)
-            {
-                AppendColored("[Übersetze…]\n", Color.DimGray, FontStyle.Italic);
-            }
-            else if (m.TranslationFailed)
-            {
-                AppendColored(m.Translation, Color.IndianRed, FontStyle.Italic);
-                AppendColored("  (Übersetzung fehlgeschlagen)\n", Color.IndianRed, FontStyle.Italic);
-            }
-            else
-            {
-                AppendColored(m.Translation + "\n", Color.PaleGreen, FontStyle.Regular);
+                AppendColored(tag + " ", color, FontStyle.Bold);
+                AppendColored(m.Player, Color.White, FontStyle.Bold);
+                if (m.IsDead) AppendColored(" [TOT]", Color.IndianRed, FontStyle.Bold);
+                if (!string.IsNullOrEmpty(m.Callout))
+                    AppendColored(" @" + m.Callout, Color.MediumPurple, FontStyle.Italic);
+                AppendColored(": ", Color.White, FontStyle.Bold);
+                AppendColored(m.Original + "\n", Color.Gainsboro, FontStyle.Regular);
+
+                AppendColored("      → ", Color.DimGray, FontStyle.Regular);
+                if (m.Translation is null)
+                {
+                    AppendColored("[Übersetze…]\n", Color.DimGray, FontStyle.Italic);
+                }
+                else if (m.TranslationFailed)
+                {
+                    AppendColored(m.Translation, Color.IndianRed, FontStyle.Italic);
+                    AppendColored("  (Übersetzung fehlgeschlagen)\n", Color.IndianRed, FontStyle.Italic);
+                }
+                else
+                {
+                    AppendColored(m.Translation + "\n", Color.PaleGreen, FontStyle.Regular);
+                }
             }
         }
-
-        _chatBox.ResumeLayout();
+        finally
+        {
+            SendMessage(_chatBox.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+            _chatBox.Invalidate();
+        }
 
         if (atBottom) ScrollToBottom();
     }

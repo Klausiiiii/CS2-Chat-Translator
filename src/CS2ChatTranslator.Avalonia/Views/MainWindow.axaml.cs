@@ -11,6 +11,7 @@ namespace CS2ChatTranslator.Views;
 public partial class MainWindow : Window
 {
     private const int MaxMessages = 500;
+    private const int RenderCoalesceMs = 50;
 
     private AppConfig _config = new();
     private ConsoleLogTailer? _tailer;
@@ -19,6 +20,8 @@ public partial class MainWindow : Window
     private int _chatFound;
     private int _translated;
     private readonly DispatcherTimer _statusTimer;
+    private readonly DispatcherTimer _renderTimer;
+    private bool _renderPending;
 
     private SelectableTextBlock _chatBox = null!;
     private TextBlock _statusLabel = null!;
@@ -42,10 +45,19 @@ public partial class MainWindow : Window
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _statusTimer.Tick += (_, _) => UpdateStatus();
 
+        _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(RenderCoalesceMs) };
+        _renderTimer.Tick += (_, _) =>
+        {
+            _renderTimer.Stop();
+            _renderPending = false;
+            Render();
+        };
+
         Opened += (_, _) => OnLoad();
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
+            _renderTimer.Stop();
             _tailer?.Dispose();
             _translator.Dispose();
         };
@@ -90,7 +102,7 @@ public partial class MainWindow : Window
 
         try
         {
-            _tailer = new ConsoleLogTailer(_config.ConsoleLogPath, startFromBeginning: true);
+            _tailer = new ConsoleLogTailer(_config.ConsoleLogPath, startFromBeginning: false);
             _tailer.LineRead += OnLineRead;
             _tailer.ErrorOccurred += OnTailerError;
             _tailer.Start();
@@ -120,7 +132,7 @@ public partial class MainWindow : Window
         {
             _messages.RemoveRange(0, _messages.Count - MaxMessages);
         }
-        Render();
+        ScheduleRender();
 
         try
         {
@@ -135,7 +147,14 @@ public partial class MainWindow : Window
             msg.TranslationFailed = true;
         }
 
-        Render();
+        ScheduleRender();
+    }
+
+    private void ScheduleRender()
+    {
+        if (_renderPending) return;
+        _renderPending = true;
+        _renderTimer.Start();
     }
 
     private async Task OnOpenSettings()
