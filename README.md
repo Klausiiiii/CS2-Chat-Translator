@@ -8,6 +8,7 @@ A small desktop tool that reads Counter-Strike 2's in-game chat and translates f
 - Pulls **all-chat and team-chat** messages, keeping who wrote them, which channel, and team-chat location callouts.
 - Translates each message into your configured target language via free Google Translate (no API key required).
 - Renders original + translation in a dark chat feed, with a live status bar showing lines read / chat found / translated.
+- **Reply in the sender's language**: click a message, type your reply, the app translates it back into the original language and writes a `.cfg` file CS2 can execute via a single keybind (see below).
 
 Currently recognizes **English** (`[ALL]` / `[CT]` / `[T]`) and **German** (`[ALLE]` / `[AT]` / `[T]`, incl. `[TOT]` dead suffix) CS2 client localizations, plus a few others. More can be added in `Services/ChatLineParser.cs` (the `TypeMap` dictionary).
 
@@ -27,6 +28,27 @@ Currently recognizes **English** (`[ALL]` / `[CT]` / `[T]`) and **German** (`[AL
 Settings persist across launches:
 - Windows: `%APPDATA%\CS2ChatTranslator\config.json`
 - Linux:   `~/.config/CS2ChatTranslator/config.json`
+
+## Replying in the sender's language
+
+The app can write the translated reply into a CS2 config file (`cs2_translator_reply.cfg`) inside the game's `cfg` folder. CS2 then executes it via a single keybind.
+
+One-time setup, inside CS2's developer console:
+
+```
+bind F8 "exec cs2_translator_reply"
+```
+
+(Any key works; `F8` is just a suggestion.)
+
+Then, in the app:
+
+1. Click a message in the feed → the bottom bar shows `Antwort an <player> • <yourLang> → <theirLang>`.
+2. Type the reply in your own language, press **Senden** (or `Enter`).
+3. The app translates it into the sender's language and writes `say "…"` (or `say_team "…"`) into the cfg file.
+4. Tab back into CS2, open chat, press `F8`. CS2 dispatches the translated `say`.
+
+The `cfg` file is overwritten on every send. Only `say` / `say_team` commands are emitted — nothing that touches game state, so this is VAC-safe (it's the same mechanism CS2 itself uses for user-authored chat binds).
 
 ## Platforms
 

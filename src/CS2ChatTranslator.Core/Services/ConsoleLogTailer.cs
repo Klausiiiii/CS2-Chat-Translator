@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace CS2ChatTranslator.Services;
@@ -86,11 +87,20 @@ public sealed class ConsoleLogTailer : IDisposable
 
         _stream.Seek(_lastPosition, SeekOrigin.Begin);
         var toRead = (int)Math.Min(currentLength - _lastPosition, 1 << 20);
-        var buffer = new byte[toRead];
-        var read = _stream.Read(buffer, 0, toRead);
-        _lastPosition += read;
+        var buffer = ArrayPool<byte>.Shared.Rent(toRead);
+        int read;
+        string chunk;
+        try
+        {
+            read = _stream.Read(buffer, 0, toRead);
+            _lastPosition += read;
+            chunk = Encoding.UTF8.GetString(buffer, 0, read);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
 
-        var chunk = Encoding.UTF8.GetString(buffer, 0, read);
         var combined = _partialLine + chunk;
 
         var lastNewline = combined.LastIndexOf('\n');
@@ -100,16 +110,21 @@ public sealed class ConsoleLogTailer : IDisposable
             return;
         }
 
-        var complete = combined.Substring(0, lastNewline);
-        _partialLine = combined.Substring(lastNewline + 1);
-
-        foreach (var line in complete.Split('\n'))
+        var start = 0;
+        while (start <= lastNewline)
         {
-            var clean = line.TrimEnd('\r');
-            if (clean.Length == 0) continue;
-            LinesRead++;
-            LineRead?.Invoke(this, clean);
+            var nl = combined.IndexOf('\n', start);
+            if (nl < 0) break;
+            var lineLen = nl - start;
+            if (lineLen > 0 && combined[nl - 1] == '\r') lineLen--;
+            if (lineLen > 0)
+            {
+                LinesRead++;
+                LineRead?.Invoke(this, combined.Substring(start, lineLen));
+            }
+            start = nl + 1;
         }
+        _partialLine = combined.Substring(lastNewline + 1);
     }
 
     private void TryReopen()

@@ -11,7 +11,7 @@ public sealed class TranslationService : IDisposable
     private readonly ConcurrentDictionary<CacheKey, TranslationResult> _cache = new();
     private readonly ConcurrentQueue<CacheKey> _cacheOrder = new();
 
-    public sealed record TranslationResult(string Text, bool Failed, bool Skipped);
+    public sealed record TranslationResult(string Text, bool Failed, bool Skipped, string? SourceLanguage);
 
     private readonly record struct CacheKey(string Text, string TargetLanguage);
 
@@ -28,16 +28,17 @@ public sealed class TranslationService : IDisposable
             try
             {
                 var result = await _translator.TranslateAsync(text, targetLanguage).ConfigureAwait(false);
+                var sourceLang = result.SourceLanguage?.ISO6391;
 
                 TranslationResult tr;
-                if (!string.IsNullOrEmpty(result.SourceLanguage?.ISO6391) &&
-                    string.Equals(result.SourceLanguage.ISO6391, targetLanguage, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(sourceLang) &&
+                    string.Equals(sourceLang, targetLanguage, StringComparison.OrdinalIgnoreCase))
                 {
-                    tr = new TranslationResult(text, Failed: false, Skipped: true);
+                    tr = new TranslationResult(text, Failed: false, Skipped: true, SourceLanguage: sourceLang);
                 }
                 else
                 {
-                    tr = new TranslationResult(result.Translation, Failed: false, Skipped: false);
+                    tr = new TranslationResult(result.Translation, Failed: false, Skipped: false, SourceLanguage: sourceLang);
                 }
 
                 Remember(key, tr);
@@ -46,14 +47,14 @@ public sealed class TranslationService : IDisposable
             catch when (attempt == 0)
             {
                 try { await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { return new TranslationResult(text, Failed: true, Skipped: false); }
+                catch (OperationCanceledException) { return new TranslationResult(text, Failed: true, Skipped: false, SourceLanguage: null); }
             }
             catch
             {
-                return new TranslationResult(text, Failed: true, Skipped: false);
+                return new TranslationResult(text, Failed: true, Skipped: false, SourceLanguage: null);
             }
         }
-        return new TranslationResult(text, Failed: true, Skipped: false);
+        return new TranslationResult(text, Failed: true, Skipped: false, SourceLanguage: null);
     }
 
     private void Remember(CacheKey key, TranslationResult result)
