@@ -2,8 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CS2ChatTranslator.Views.MainWindow"
         Title="CS2 Chat Translator"
-        Width="900" Height="560"
-        MinWidth="500" MinHeight="300"
+        Width="900" Height="620"
+        MinWidth="500" MinHeight="320"
         Background="#181A1E">
   <DockPanel LastChildFill="True">
     <Menu DockPanel.Dock="Top">
@@ -19,6 +19,37 @@
       <TextBlock Name="StatusLabel"
                  Foreground="#C8C8C8"
                  Text="Nicht gestartet — bitte Einstellungen öffnen." />
+    </Border>
+    <Border DockPanel.Dock="Bottom"
+            Background="#1E2126"
+            BorderBrush="#2A2D33" BorderThickness="0,1,0,1"
+            Padding="8,6">
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+        <TextBlock Name="ReplyTargetLabel"
+                   Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                   Foreground="#DCDCDC"
+                   Margin="0,0,0,4"
+                   Text="Antwort: keine Nachricht gewählt — klicke eine Nachricht oben an." />
+        <TextBox Name="ReplyInput"
+                 Grid.Row="1" Grid.Column="0"
+                 Background="#282C32"
+                 Foreground="#FFFFFF"
+                 BorderBrush="#3A3F47"
+                 IsEnabled="False"
+                 Margin="0,0,8,0" />
+        <Button Name="ReplySendBtn"
+                Grid.Row="1" Grid.Column="1"
+                Content="Senden"
+                IsEnabled="False"
+                MinWidth="90" />
+        <TextBlock Name="ReplyHintLabel"
+                   Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                   Foreground="#6C7079"
+                   FontStyle="Italic"
+                   FontSize="11"
+                   Margin="0,4,0,0"
+                   Text="Tipp: in CS2 einmalig in der Konsole eingeben: bind F8 &quot;exec cs2_translator_reply&quot;" />
+      </Grid>
     </Border>
     <ScrollViewer Name="ChatScroller"
                   HorizontalScrollBarVisibility="Disabled"

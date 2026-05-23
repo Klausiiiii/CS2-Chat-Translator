@@ -34,6 +34,9 @@ public static class ChatLineParser
         message = null;
         if (string.IsNullOrWhiteSpace(line)) return false;
 
+        var bracketIdx = line.IndexOf('[');
+        if (bracketIdx < 0 || bracketIdx > 16) return false;
+
         var cleaned = line.Replace("\u200E", "").Replace("\u200F", "").TrimEnd('\r', '\n', ' ', '\t');
 
         var m = LineRegex.Match(cleaned);
