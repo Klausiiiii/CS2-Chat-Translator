@@ -182,6 +182,68 @@ public class ConsoleLogTailerTests : IDisposable
         Assert.DoesNotContain(received, l => l.StartsWith("AAAA"));     // garbage was dropped
     }
 
+    [Fact]
+    public async Task Seed_EmitsLastLines_AsBatch()
+    {
+        File.WriteAllText(_path, "[ALL] a: one\n[ALL] b: two\n[ALL] c: three\n", Encoding.UTF8);
+        IReadOnlyList<string>? batch = null;
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50), seedTailBytes: 1 << 20);
+        tailer.SeedRead += (_, lines) => batch = lines;
+        tailer.Start();
+
+        Assert.NotNull(batch);
+        Assert.Equal(new[] { "[ALL] a: one", "[ALL] b: two", "[ALL] c: three" }, batch);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Seed_DiscardsPartialFirstLine_WhenWindowStartsMidFile()
+    {
+        // Window smaller than the file: the first line is sliced mid-way and must be dropped.
+        File.WriteAllText(_path, "[ALL] old: AAAAAAAAAA\n[ALL] new: keep\n", Encoding.UTF8);
+        IReadOnlyList<string>? batch = null;
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50), seedTailBytes: 20);
+        tailer.SeedRead += (_, lines) => batch = lines;
+        tailer.Start();
+
+        Assert.NotNull(batch);
+        Assert.DoesNotContain(batch!, l => l.Contains("old"));
+        Assert.Contains("[ALL] new: keep", batch!);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Seed_ThenTailsLiveContent_NoGapNoDuplication()
+    {
+        File.WriteAllText(_path, "[ALL] a: seed1\n[ALL] b: seed2\n", Encoding.UTF8);
+        IReadOnlyList<string>? batch = null;
+        var live = new List<string>();
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50), seedTailBytes: 1 << 20);
+        tailer.SeedRead += (_, lines) => batch = lines;
+        tailer.LineRead += (_, line) => { lock (live) live.Add(line); };
+        tailer.Start();
+
+        File.AppendAllText(_path, "[ALL] c: live1\n", Encoding.UTF8);
+        await WaitUntil(() => live.Contains("[ALL] c: live1"), TimeSpan.FromSeconds(3));
+
+        Assert.Equal(new[] { "[ALL] a: seed1", "[ALL] b: seed2" }, batch);
+        Assert.Contains("[ALL] c: live1", live);                    // live tailing continues
+        Assert.DoesNotContain(live, l => l.Contains("seed"));        // seed not re-emitted as live
+    }
+
+    [Fact]
+    public async Task Seed_Disabled_ByDefault_FiresNoSeedEvent()
+    {
+        File.WriteAllText(_path, "[ALL] a: one\n[ALL] b: two\n", Encoding.UTF8);
+        var fired = false;
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50));
+        tailer.SeedRead += (_, _) => fired = true;
+        tailer.Start();
+
+        await Task.Delay(150);
+        Assert.False(fired);
+    }
+
     private static void AppendBytes(string path, byte[] bytes)
     {
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write,
