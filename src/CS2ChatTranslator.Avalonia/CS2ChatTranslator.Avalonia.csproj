@@ -17,6 +17,12 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3" Condition="'$(Configuration)' == 'Debug'" />
+    <!-- Avalonia 11.2.3 pulls Tmds.DBus.Protocol 0.20.0 transitively, which has a
+         known high-severity advisory (GHSA-xrw6-gwf8-vvr9). Override it with the
+         0.21.3 backport fix. It's the minimal bump off 0.20.x, so it stays API-
+         compatible with what Avalonia compiled against (unlike the 0.92.0 jump).
+         Only reached at runtime on Linux. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
   </ItemGroup>
 
   <ItemGroup>
