@@ -686,14 +686,24 @@ dotnet publish src/CS2ChatTranslator.Avalonia/CS2ChatTranslator.Avalonia.csproj 
 ```
 Expected: both exit 0; `out/win-winforms/CS2ChatTranslator.exe` and `out/linux/CS2ChatTranslator.Avalonia` present.
 
+Then stage **version-stamped copies** for upload. Convention (decided with the user): `CS2ChatTranslator-<version>-<rid>[.exe]`. gh uses the file's basename as the download filename, so the assets must be renamed on disk before upload:
+
+```bash
+VERSION=1.2.0
+cp out/win-winforms/CS2ChatTranslator.exe "out/CS2ChatTranslator-${VERSION}-win-x64.exe"
+cp out/linux/CS2ChatTranslator.Avalonia   "out/CS2ChatTranslator-${VERSION}-linux-x64"
+ls -la "out/CS2ChatTranslator-${VERSION}-win-x64.exe" "out/CS2ChatTranslator-${VERSION}-linux-x64"
+```
+Expected: both version-stamped files present with the expected sizes (~52 MB win, ~48 MB linux).
+
 - [ ] **Step 3: Create the GitHub release**
 
-Write release notes to a scratch file (features: startup seed; security: NU1903/Tmds pin), then:
+Write release notes to a scratch file (features: startup seed; security: NU1903/Tmds pin), then upload the **version-stamped** files. Existing releases (1.0.0/1.0.1/1.1.0) are NOT renamed — only 1.2.0 onward carries the version in the filename:
 
 ```bash
 gh release create 1.2.0 --target main --title "1.2.0" --notes-file <notes> \
-  "out/win-winforms/CS2ChatTranslator.exe#CS2ChatTranslator.exe (Windows x64)" \
-  "out/linux/CS2ChatTranslator.Avalonia#CS2ChatTranslator.Avalonia (Linux x64)"
+  "out/CS2ChatTranslator-1.2.0-win-x64.exe#CS2ChatTranslator-1.2.0-win-x64.exe (Windows x64)" \
+  "out/CS2ChatTranslator-1.2.0-linux-x64#CS2ChatTranslator-1.2.0-linux-x64 (Linux x64)"
 ```
 
 - [ ] **Step 4: Verify the release**
@@ -702,7 +712,7 @@ gh release create 1.2.0 --target main --title "1.2.0" --notes-file <notes> \
 gh release view 1.2.0 --json tagName,targetCommitish,assets --jq '{tag:.tagName, target:.targetCommitish, assets:[.assets[]|{name:.name, state:.state}]}'
 gh release list --limit 3
 ```
-Expected: both assets `uploaded`, 1.2.0 is `Latest`, tag on the main commit.
+Expected: both assets `uploaded` with the version-stamped names (`CS2ChatTranslator-1.2.0-win-x64.exe`, `CS2ChatTranslator-1.2.0-linux-x64`), 1.2.0 is `Latest`, tag on the main commit.
 
 ---
 
