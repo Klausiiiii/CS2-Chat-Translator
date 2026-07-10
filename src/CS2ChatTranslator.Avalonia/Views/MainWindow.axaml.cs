@@ -12,6 +12,8 @@ namespace CS2ChatTranslator.Views;
 public partial class MainWindow : Window
 {
     private const int MaxMessages = 500;
+    private const int SeedMaxMessages = 25;
+    private const int SeedStaggerDelayMs = 200;
 
     private static readonly IBrush BrushAll      = new SolidColorBrush(Color.FromRgb(211, 211, 211));
     private static readonly IBrush BrushCT       = new SolidColorBrush(Color.FromRgb(100, 149, 237));
@@ -156,8 +158,12 @@ public partial class MainWindow : Window
 
         try
         {
-            _tailer = new ConsoleLogTailer(_config.ConsoleLogPath, startFromBeginning: false);
+            _tailer = new ConsoleLogTailer(
+                _config.ConsoleLogPath,
+                startFromBeginning: false,
+                seedTailBytes: ConsoleLogTailer.DefaultSeedTailBytes);
             _tailer.LineRead += OnLineRead;
+            _tailer.SeedRead += OnSeedRead;
             _tailer.ErrorOccurred += OnTailerError;
             _tailer.Start();
         }
@@ -189,22 +195,57 @@ public partial class MainWindow : Window
             _messages.Add(msg);
             AppendMessage(msg);
             if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
+            await TranslateMessage(msg);
+        }
+        catch
+        {
+            // never let a UI-mutation exception escape an async void handler
+        }
+    }
 
-            try
-            {
-                var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
-                msg.SourceLanguage = result.SourceLanguage;
-                msg.Translation = result.Text;
-                msg.TranslationFailed = result.Failed;
-                if (!result.Failed) _translated++;
-            }
-            catch
-            {
-                msg.Translation = msg.Original;
-                msg.TranslationFailed = true;
-            }
+    private async Task TranslateMessage(ChatMessage msg)
+    {
+        try
+        {
+            var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
+            msg.SourceLanguage = result.SourceLanguage;
+            msg.Translation = result.Text;
+            msg.TranslationFailed = result.Failed;
+            if (!result.Failed) _translated++;
+        }
+        catch
+        {
+            msg.Translation = msg.Original;
+            msg.TranslationFailed = true;
+        }
+        UpdateMessageTranslation(msg);
+    }
 
-            UpdateMessageTranslation(msg);
+    private void OnSeedRead(object? sender, IReadOnlyList<string> lines)
+    {
+        var msgs = ChatSeedSelector.LastMessages(lines, SeedMaxMessages);
+        if (msgs.Count == 0) return;
+        Dispatcher.UIThread.Post(() => HandleSeed(msgs));
+    }
+
+    private async void HandleSeed(IReadOnlyList<ChatMessage> msgs)
+    {
+        try
+        {
+            foreach (var m in msgs)
+            {
+                _chatFound++;
+                _messages.Add(m);
+                AppendMessage(m);
+            }
+            if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
+
+            // Stagger translation starts so the keyless endpoint isn't hit with a burst.
+            foreach (var m in msgs)
+            {
+                _ = TranslateMessage(m);
+                await Task.Delay(SeedStaggerDelayMs);
+            }
         }
         catch
         {
