@@ -164,13 +164,22 @@ public partial class MainForm : Form
     {
         try
         {
-            foreach (var m in msgs)
+            SendMessage(_chatBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+            try
             {
-                _chatFound++;
-                _messages.Add(m);
-                AppendMessage(m);
+                foreach (var m in msgs)
+                {
+                    _chatFound++;
+                    _messages.Add(m);
+                    AppendMessage(m, suppressRedraw: true);
+                }
+                if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
             }
-            if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
+            finally
+            {
+                SendMessage(_chatBox.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+                _chatBox.Invalidate();
+            }
 
             // Stagger translation starts so the keyless endpoint isn't hit with a burst.
             foreach (var m in msgs)
@@ -185,11 +194,11 @@ public partial class MainForm : Form
         }
     }
 
-    private void AppendMessage(ChatMessage m)
+    private void AppendMessage(ChatMessage m, bool suppressRedraw = false)
     {
         var atBottom = IsScrolledToBottom();
 
-        SendMessage(_chatBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        if (!suppressRedraw) SendMessage(_chatBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
         try
         {
             var range = new MessageRange { Start = _chatBox.TextLength };
@@ -217,8 +226,11 @@ public partial class MainForm : Form
         }
         finally
         {
-            SendMessage(_chatBox.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
-            _chatBox.Invalidate();
+            if (!suppressRedraw)
+            {
+                SendMessage(_chatBox.Handle, WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+                _chatBox.Invalidate();
+            }
         }
 
         if (atBottom) ScrollToBottom();

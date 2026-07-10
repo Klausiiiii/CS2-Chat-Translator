@@ -180,7 +180,10 @@ public sealed class ConsoleLogTailer : IDisposable
         char[]? charBuffer = null;
         try
         {
-            var read = _stream.Read(buffer, 0, toRead);
+            var read = 0;
+            int n;
+            while (read < toRead && (n = _stream.Read(buffer, read, toRead - read)) > 0)
+                read += n;
             _lastPosition = offset + read;
             var charCount = _decoder.GetCharCount(buffer, 0, read, flush: false);
             charBuffer = ArrayPool<char>.Shared.Rent(charCount == 0 ? 1 : charCount);

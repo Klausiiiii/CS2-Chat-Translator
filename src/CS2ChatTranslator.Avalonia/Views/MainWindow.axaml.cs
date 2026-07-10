@@ -54,6 +54,7 @@ public partial class MainWindow : Window
 
     private ChatMessage? _replyTarget;
     private bool _replyOnboardingShown;
+    private bool _closed;
 
     private sealed class MessageInlines
     {
@@ -112,6 +113,7 @@ public partial class MainWindow : Window
         Opened += (_, _) => OnLoad();
         Closed += (_, _) =>
         {
+            _closed = true;
             _statusTimer.Stop();
             _tailer?.Dispose();
             _translator.Dispose();
@@ -218,7 +220,7 @@ public partial class MainWindow : Window
             msg.Translation = msg.Original;
             msg.TranslationFailed = true;
         }
-        UpdateMessageTranslation(msg);
+        if (!_closed) UpdateMessageTranslation(msg);
     }
 
     private void OnSeedRead(object? sender, IReadOnlyList<string> lines)
