@@ -648,15 +648,27 @@ Expected: PASS — all prior tests plus the new seed/selector tests (green, 0 fa
 Run: `dotnet build -c Release`
 Expected: `0 Fehler`, no NU1903.
 
-- [ ] **Step 4: Manual smoke check (document the result)**
+- [ ] **Step 4: End-to-end seed verification via a Core integration test**
 
-Create a temp log with >25 chat lines mixed with system noise, point a dev run at it (`dotnet run --project src/CS2ChatTranslator.Avalonia`), and confirm the feed shows the last ~25 messages translating in staggered, then live-tails an appended line. Note the observed result in the commit message. (If a headless environment blocks a GUI run, state that explicitly instead of claiming success.)
+A GUI smoke run can't be automated in this environment, so verify the seed pipeline up to the UI boundary with a real integration test in `tests/CS2ChatTranslator.Tests/` (new file `SeedPipelineTests.cs`). The test must, against a temp log:
+
+1. Write >25 chat lines interleaved with system-noise lines (`[RenderSystem]`, `[Client]`, `[Filesystem]`).
+2. Construct `new ConsoleLogTailer(path, TimeSpan.FromMilliseconds(50), seedTailBytes: ConsoleLogTailer.DefaultSeedTailBytes)`, capture the `SeedRead` batch, `Start()`.
+3. Run the batch through `ChatSeedSelector.LastMessages(batch, 25)` and assert exactly the last 25 chat messages come back, in chronological order, with the interleaved noise excluded.
+4. Append a live chat line, and assert it arrives via `LineRead` (not re-emitted from the seed) — proving no gap/duplication at the seed→live boundary.
+
+Use the existing test-file idioms (temp path in ctor, `IDisposable` cleanup, `WaitUntil`). Run:
+
+`dotnet test --filter "FullyQualifiedName~SeedPipelineTests"`
+Expected: PASS.
+
+State explicitly in the report that the actual on-screen rendering (staggered `[Übersetze…]` placeholders, colors, no-flicker) is NOT covered by automated tests and would need a manual GUI run to confirm.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add CLAUDE.md
-git commit -m "docs: document startup chat seed in CLAUDE.md"
+git add CLAUDE.md tests/CS2ChatTranslator.Tests/SeedPipelineTests.cs
+git commit -m "test+docs: seed pipeline integration test; document startup seed"
 ```
 
 ---
