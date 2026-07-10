@@ -140,7 +140,56 @@ public ConsoleLogTailer(string path, TimeSpan? pollInterval = null, bool startFr
 }
 ```
 
-- [ ] **Step 4: Emit the seed in `Start()`**
+- [ ] **Step 4: Extract a shared line-splitting helper and route `ReadNewBytes` through it**
+
+To keep the seed path and the live path from drifting on `\r\n`/empty-line rules, extract the splitting loop into one private helper used by both. Add this method:
+
+```csharp
+// Emits each complete, non-empty (\r-trimmed) line in [startIdx, lastNewline] via onLine and
+// returns the trailing partial (substring after the last '\n'). If there is no '\n' at/after
+// startIdx, returns the whole remainder from startIdx unchanged. Shared by the live read path
+// and the seed path so the line-splitting rules stay identical.
+private string EmitCompleteLines(string text, int startIdx, Action<string> onLine)
+{
+    var lastNewline = text.LastIndexOf('\n');
+    if (lastNewline < startIdx) return text.Substring(startIdx);
+
+    var start = startIdx;
+    while (start <= lastNewline)
+    {
+        var nl = text.IndexOf('\n', start);
+        if (nl < 0) break;
+        var lineLen = nl - start;
+        if (lineLen > 0 && text[nl - 1] == '\r') lineLen--;
+        if (lineLen > 0)
+        {
+            LinesRead++;
+            onLine(text.Substring(start, lineLen));
+        }
+        start = nl + 1;
+    }
+    return text.Substring(lastNewline + 1);
+}
+```
+
+Now replace the tail of `ReadNewBytes` (from `var combined = _partialLine + chunk;` to the end of the method) with the helper call. The `MaxPartialLine` cap stays here — it is specific to the live path:
+
+```csharp
+var combined = _partialLine + chunk;
+
+if (combined.LastIndexOf('\n') < 0)
+{
+    // Bound the accumulator: a newline-free stream (misconfigured/binary file) would otherwise
+    // grow _partialLine without limit and make `combined = _partialLine + chunk` O(N^2). Real
+    // CS2 chat lines are well under this cap; discard and resync on the next '\n'.
+    _partialLine = combined.Length > MaxPartialLine ? "" : combined;
+    return;
+}
+
+_partialLine = EmitCompleteLines(combined, 0, line => LineRead?.Invoke(this, line));
+```
+
+- [ ] **Step 5: Emit the seed in `Start()` using the helper**
 
 Change `Start()` to run the seed after opening, before arming the timer:
 
@@ -153,7 +202,7 @@ public void Start()
 }
 ```
 
-Add the `EmitSeed` method. It re-seeks to the window start, decodes with a reset decoder, drops the sliced first line when it started mid-file, splits complete lines into a batch, keeps the trailing partial line for live tailing, and leaves `_lastPosition` at the true end so no live bytes are lost or duplicated:
+Add the `EmitSeed` method. It re-seeks to the window start, decodes with a reset decoder, drops the sliced first line when it started mid-file, splits complete lines into a batch via the shared helper, keeps the trailing partial for live tailing, and leaves `_lastPosition` at the true end so no live bytes are lost or duplicated:
 
 ```csharp
 private void EmitSeed()
@@ -196,40 +245,18 @@ private void EmitSeed()
         startIdx = firstNl + 1;
     }
 
-    var lastNewline = text.LastIndexOf('\n');
-    if (lastNewline < startIdx)
-    {
-        _partialLine = text.Substring(startIdx);
-        return;
-    }
-
     var lines = new List<string>();
-    var start = startIdx;
-    while (start <= lastNewline)
-    {
-        var nl = text.IndexOf('\n', start);
-        if (nl < 0) break;
-        var lineLen = nl - start;
-        if (lineLen > 0 && text[nl - 1] == '\r') lineLen--;
-        if (lineLen > 0)
-        {
-            LinesRead++;
-            lines.Add(text.Substring(start, lineLen));
-        }
-        start = nl + 1;
-    }
-    _partialLine = text.Substring(lastNewline + 1);
-
+    _partialLine = EmitCompleteLines(text, startIdx, lines.Add);
     if (lines.Count > 0) SeedRead?.Invoke(this, lines);
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `dotnet test --filter "FullyQualifiedName~ConsoleLogTailerTests"`
-Expected: PASS — all seed tests plus the pre-existing tailer tests.
+Expected: PASS — all seed tests plus the pre-existing tailer tests (which also cover the `ReadNewBytes` refactor to `EmitCompleteLines`).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/CS2ChatTranslator.Core/Services/ConsoleLogTailer.cs tests/CS2ChatTranslator.Tests/ConsoleLogTailerTests.cs
