@@ -43,6 +43,7 @@ public partial class MainWindow : Window
 
     private SelectableTextBlock _chatBox = null!;
     private TextBlock _statusLabel = null!;
+    private TextBlock _versionLabel = null!;
     private ScrollViewer _chatScroller = null!;
     private MenuItem _settingsItem = null!;
     private MenuItem _exitItem = null!;
@@ -84,6 +85,8 @@ public partial class MainWindow : Window
 
         _chatBox = this.FindControl<SelectableTextBlock>("ChatBox")!;
         _statusLabel = this.FindControl<TextBlock>("StatusLabel")!;
+        _versionLabel = this.FindControl<TextBlock>("VersionLabel")!;
+        _versionLabel.Text = AppInfo.DisplayVersion(typeof(MainWindow).Assembly);
         _chatScroller = this.FindControl<ScrollViewer>("ChatScroller")!;
         _settingsItem = this.FindControl<MenuItem>("SettingsItem")!;
         _exitItem = this.FindControl<MenuItem>("ExitItem")!;

@@ -25,6 +25,7 @@ partial class MainForm
     private ToolStripMenuItem _exitItem = null!;
     private StatusStrip _status = null!;
     private ToolStripStatusLabel _statusLabel = null!;
+    private ToolStripStatusLabel _versionLabel = null!;
     private RichTextBox _chatBox = null!;
 
     private Panel _replyPanel = null!;
@@ -52,8 +53,14 @@ partial class MainForm
         MainMenuStrip = _menu;
 
         _status = new StatusStrip();
-        _statusLabel = new ToolStripStatusLabel("Nicht gestartet — bitte Einstellungen öffnen.");
+        _statusLabel = new ToolStripStatusLabel("Nicht gestartet — bitte Einstellungen öffnen.")
+        {
+            Spring = true,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        _versionLabel = new ToolStripStatusLabel { ForeColor = Color.Gray };
         _status.Items.Add(_statusLabel);
+        _status.Items.Add(_versionLabel);
 
         _replyPanel = new Panel
         {

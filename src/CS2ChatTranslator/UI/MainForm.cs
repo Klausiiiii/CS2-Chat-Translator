@@ -40,6 +40,7 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
+        _versionLabel.Text = AppInfo.DisplayVersion(typeof(MainForm).Assembly);
         Load += (_, _) => OnLoadAsync();
         _statusTimer.Tick += (_, _) => UpdateStatus();
         _statusTimer.Start();

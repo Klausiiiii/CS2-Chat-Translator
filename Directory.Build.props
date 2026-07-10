@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- Single source of truth for the app version. Bump this together with the release tag.
+       Flows into every project's assembly version; both UIs display it in the status bar
+       via AppInfo.DisplayVersion(...). -->
+  <PropertyGroup>
+    <Version>1.2.0</Version>
+  </PropertyGroup>
+
+</Project>

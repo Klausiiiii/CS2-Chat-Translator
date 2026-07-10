@@ -16,9 +16,16 @@
     <Border DockPanel.Dock="Bottom"
             BorderBrush="#2A2D33" BorderThickness="0,1,0,0"
             Padding="8,4">
-      <TextBlock Name="StatusLabel"
-                 Foreground="#C8C8C8"
-                 Text="Nicht gestartet — bitte Einstellungen öffnen." />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Name="StatusLabel"
+                   Grid.Column="0"
+                   Foreground="#C8C8C8"
+                   Text="Nicht gestartet — bitte Einstellungen öffnen." />
+        <TextBlock Name="VersionLabel"
+                   Grid.Column="1"
+                   Margin="12,0,0,0"
+                   Foreground="#808080" />
+      </Grid>
     </Border>
     <Border DockPanel.Dock="Bottom"
             Background="#1E2126"
