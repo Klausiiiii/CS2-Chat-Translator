@@ -54,12 +54,37 @@ public class ChatInjectionServiceTests : IDisposable
     }
 
     [Fact]
-    public void WriteSayCommand_EscapesDoubleQuotes()
+    public void WriteSayCommand_NeutralizesDoubleQuotes_KeepsSingleSayArgument()
     {
+        // Source/Source-2's console tokenizer does NOT honor backslash-escaped quotes:
+        // a literal " ALWAYS closes the quoted say argument. So the only safe escaping is to
+        // ensure no ASCII double-quote survives inside the body — backslash-escaping (\") is unsafe.
         var cfg = Path.Combine(_tmpDir, "cs2_translator_reply.cfg");
         ChatInjectionService.WriteSayCommand(cfg, "he said \"hi\"", ChatType.All);
+        var line = File.ReadAllText(cfg).TrimEnd('\r', '\n');
+
+        Assert.StartsWith("say \"", line);
+        Assert.EndsWith("\"", line);
+        var inner = line.Substring("say \"".Length, line.Length - "say \"".Length - 1);
+        Assert.DoesNotContain('"', inner); // no ASCII " can break out of the say argument
+    }
+
+    [Fact]
+    public void WriteSayCommand_PreventsConsoleCommandBreakout()
+    {
+        // A reply (or translation output) carrying a quote + semicolons must NOT be able to
+        // close the say string and run the tail as separate console commands (e.g. "; quit").
+        var cfg = Path.Combine(_tmpDir, "cs2_translator_reply.cfg");
+        ChatInjectionService.WriteSayCommand(cfg, "nice try\" ; quit ;", ChatType.All);
         var text = File.ReadAllText(cfg);
-        Assert.Contains("\"he said \\\"hi\\\"\"", text);
+
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Single(lines); // exactly one say command, no injected lines
+        var line = lines[0].TrimEnd('\r');
+        Assert.StartsWith("say \"", line);
+        Assert.EndsWith("\"", line);
+        var inner = line.Substring("say \"".Length, line.Length - "say \"".Length - 1);
+        Assert.DoesNotContain('"', inner); // the "; quit" stays inside the quoted argument
     }
 
     [Fact]

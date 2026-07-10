@@ -92,6 +92,103 @@ public class ConsoleLogTailerTests : IDisposable
         Assert.Contains("[ALL] x: half-message", received);
     }
 
+    [Fact]
+    public async Task Decodes_MultibyteCodepoint_SplitAcrossReads()
+    {
+        var received = new List<string>();
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50));
+        tailer.LineRead += (_, line) => { lock (received) received.Add(line); };
+        tailer.Start();
+
+        await Task.Delay(100);
+
+        // Split the Cyrillic line so a 2-byte codepoint ('п' = 0xD0 0xBF) straddles two reads:
+        // 9 ASCII bytes of "[ALL] P: " + the first byte of 'п' in the first write.
+        var full = Encoding.UTF8.GetBytes("[ALL] P: привет\n");
+        const int splitAt = 10;
+        AppendBytes(_path, full[..splitAt]);
+        await Task.Delay(150); // guarantee a tick consumes the partial codepoint
+        AppendBytes(_path, full[splitAt..]);
+
+        await WaitUntil(() => received.Any(l => l.Contains("привет")), TimeSpan.FromSeconds(3));
+
+        Assert.Contains("[ALL] P: привет", received);
+        Assert.DoesNotContain(received, l => l.Contains('�')); // no replacement chars
+    }
+
+    [Fact]
+    public async Task Decodes_Cleanly_AfterTruncationSplitsCodepoint()
+    {
+        var received = new List<string>();
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50));
+        tailer.LineRead += (_, line) => { lock (received) received.Add(line); };
+        tailer.Start();
+
+        await Task.Delay(100);
+
+        // Leave a dangling half-codepoint in the decoder, then restart (truncate) the file.
+        var full = Encoding.UTF8.GetBytes("[ALL] P: привет\n");
+        AppendBytes(_path, full[..10]);
+        await Task.Delay(150);
+
+        using (var fs = new FileStream(_path, FileMode.Truncate, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+        {
+            var bytes = Encoding.UTF8.GetBytes("[ALL] Q: спасибо\n");
+            fs.Write(bytes, 0, bytes.Length);
+        }
+
+        await WaitUntil(() => received.Any(l => l.Contains("спасибо")), TimeSpan.FromSeconds(3));
+
+        // The decoder must be Reset on truncation, else the stale 0xD0 prepends garbage.
+        Assert.Contains("[ALL] Q: спасибо", received);
+        Assert.DoesNotContain(received, l => l.Contains('�'));
+    }
+
+    [Fact]
+    public async Task Dispose_DuringActiveTailing_RaisesNoError()
+    {
+        for (var i = 0; i < 25; i++)
+        {
+            Exception? observed = null;
+            var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(1));
+            tailer.ErrorOccurred += (_, ex) => observed = ex;
+            tailer.Start();
+            File.AppendAllText(_path, $"[ALL] x: line{i}\n", Encoding.UTF8);
+            await Task.Delay(2);
+            tailer.Dispose();        // must not race an in-flight tick into ObjectDisposedException
+            await Task.Delay(5);
+            Assert.Null(observed);
+        }
+    }
+
+    [Fact]
+    public async Task DiscardsOversizedPartialLine_AndResyncs()
+    {
+        var received = new List<string>();
+        using var tailer = new ConsoleLogTailer(_path, TimeSpan.FromMilliseconds(50));
+        tailer.LineRead += (_, line) => { lock (received) received.Add(line); };
+        tailer.Start();
+
+        await Task.Delay(100);
+
+        // ~200 KB without a newline must be discarded, not retained/concatenated forever.
+        File.AppendAllText(_path, new string('A', 200_000), Encoding.UTF8);
+        await Task.Delay(200);
+        File.AppendAllText(_path, "[ALL] x: hi\n", Encoding.UTF8);
+
+        await WaitUntil(() => received.Any(l => l == "[ALL] x: hi"), TimeSpan.FromSeconds(3));
+
+        Assert.Contains("[ALL] x: hi", received);                       // clean resync
+        Assert.DoesNotContain(received, l => l.StartsWith("AAAA"));     // garbage was dropped
+    }
+
+    private static void AppendBytes(string path, byte[] bytes)
+    {
+        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete);
+        fs.Write(bytes, 0, bytes.Length);
+    }
+
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;

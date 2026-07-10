@@ -66,6 +66,15 @@ public partial class MainWindow : Window
     private static int RunLength(Inline inline) =>
         inline is Run r ? (r.Text?.Length ?? 0) : 0;
 
+    // Manual sum over the concrete List<Inline> — Enumerable.Sum would box the list enumerator
+    // on the heap once per message on the UI thread, against this file's zero-alloc intent.
+    private static int TotalLength(List<Inline> list)
+    {
+        var len = 0;
+        foreach (var inline in list) len += RunLength(inline);
+        return len;
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -171,26 +180,36 @@ public partial class MainWindow : Window
 
     private async void HandleNewMessage(ChatMessage msg)
     {
-        _chatFound++;
-        _messages.Add(msg);
-        AppendMessage(msg);
-        if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
-
+        // Outer guard: async void over the UI dispatcher — an unobserved exception from a UI
+        // mutation below (e.g. a shutdown race) would crash the process. Drop the one message
+        // instead. The inner try/catch still renders the failed-translation state.
         try
         {
-            var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
-            msg.SourceLanguage = result.SourceLanguage;
-            msg.Translation = result.Text;
-            msg.TranslationFailed = result.Failed;
-            if (!result.Failed) _translated++;
+            _chatFound++;
+            _messages.Add(msg);
+            AppendMessage(msg);
+            if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
+
+            try
+            {
+                var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
+                msg.SourceLanguage = result.SourceLanguage;
+                msg.Translation = result.Text;
+                msg.TranslationFailed = result.Failed;
+                if (!result.Failed) _translated++;
+            }
+            catch
+            {
+                msg.Translation = msg.Original;
+                msg.TranslationFailed = true;
+            }
+
+            UpdateMessageTranslation(msg);
         }
         catch
         {
-            msg.Translation = msg.Original;
-            msg.TranslationFailed = true;
+            // never let a UI-mutation exception escape an async void handler
         }
-
-        UpdateMessageTranslation(msg);
     }
 
     private void AppendMessage(ChatMessage m)
@@ -222,7 +241,7 @@ public partial class MainWindow : Window
 
         foreach (var inline in added) inlines.Add(inline);
 
-        var charLen = added.Sum(RunLength);
+        var charLen = TotalLength(added);
         var entry = new MessageInlines
         {
             Message = m,
@@ -280,7 +299,7 @@ public partial class MainWindow : Window
             entry.TranslationRun.FontStyle = FontStyle.Normal;
         }
 
-        var newLen = entry.All.Sum(RunLength);
+        var newLen = TotalLength(entry.All);
         var delta = newLen - oldLen;
         entry.CharEnd += delta;
         if (delta != 0) ShiftCharsAfter(entry, delta);

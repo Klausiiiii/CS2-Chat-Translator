@@ -44,8 +44,12 @@ public static class ChatInjectionService
         var lastWasSpace = false;
         foreach (var c in message)
         {
+            // A literal " ALWAYS terminates a quoted argument in the Source/Source-2 console —
+            // backslash-escaping (\") is NOT honored, so the tail would re-tokenize as separate
+            // console commands (";" is a command separator). Substitute a non-breakout glyph that
+            // renders as a quote in CS2's UTF-8 chat instead of trying to escape it.
             if (c == '\\')        { sb.Append("\\\\"); lastWasSpace = false; }
-            else if (c == '"')    { sb.Append("\\\""); lastWasSpace = false; }
+            else if (c == '"')    { sb.Append('”'); lastWasSpace = false; }
             else if (c == '\r' || c == '\n' || c == '\t' || c < 0x20)
             {
                 if (!lastWasSpace) { sb.Append(' '); lastWasSpace = true; }

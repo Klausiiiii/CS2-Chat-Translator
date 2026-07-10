@@ -111,26 +111,37 @@ public partial class MainForm : Form
 
     private async void HandleNewMessage(ChatMessage msg)
     {
-        _chatFound++;
-        _messages.Add(msg);
-        AppendMessage(msg);
-        if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
-
+        // Outer guard: this is async void over the UI SynchronizationContext, so an unobserved
+        // exception from any UI mutation below (e.g. a shutdown race where the form is disposed
+        // between IsHandleCreated and the queued append) would tear down the whole process. Drop
+        // the one message instead. The inner try/catch still renders the failed-translation state.
         try
         {
-            var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
-            msg.Translation = result.Text;
-            msg.TranslationFailed = result.Failed;
-            msg.SourceLanguage = result.SourceLanguage;
-            if (!result.Failed) _translated++;
+            _chatFound++;
+            _messages.Add(msg);
+            AppendMessage(msg);
+            if (_messages.Count > MaxMessages) TrimOldest(_messages.Count - MaxMessages);
+
+            try
+            {
+                var result = await _translator.TranslateAsync(msg.Original, _config.TargetLanguage);
+                msg.Translation = result.Text;
+                msg.TranslationFailed = result.Failed;
+                msg.SourceLanguage = result.SourceLanguage;
+                if (!result.Failed) _translated++;
+            }
+            catch
+            {
+                msg.Translation = msg.Original;
+                msg.TranslationFailed = true;
+            }
+
+            if (IsHandleCreated) UpdateMessageTranslation(msg);
         }
         catch
         {
-            msg.Translation = msg.Original;
-            msg.TranslationFailed = true;
+            // never let a UI-mutation exception escape an async void handler
         }
-
-        if (IsHandleCreated) UpdateMessageTranslation(msg);
     }
 
     private void AppendMessage(ChatMessage m)

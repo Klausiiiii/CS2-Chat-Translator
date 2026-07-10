@@ -5,15 +5,21 @@ namespace CS2ChatTranslator.Services;
 
 public sealed class ConsoleLogTailer : IDisposable
 {
+    private const int MaxPartialLine = 64 * 1024;
+
     private readonly string _path;
     private readonly TimeSpan _pollInterval;
     private readonly bool _startFromBeginning;
     private readonly System.Threading.Timer _timer;
+    // UTF-8 is stateful: a multibyte codepoint can straddle two reads (the 1 MiB read cap, or a
+    // flush that lands mid-character). A shared Decoder retains the incomplete trailing bytes
+    // between ticks so split codepoints decode correctly instead of becoming U+FFFD.
+    private readonly Decoder _decoder = Encoding.UTF8.GetDecoder();
     private FileStream? _stream;
     private long _lastPosition;
     private string _partialLine = "";
     private int _inTick;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public long LinesRead { get; private set; }
 
@@ -51,6 +57,7 @@ public sealed class ConsoleLogTailer : IDisposable
             _lastPosition = _stream.Position;
         }
         _partialLine = "";
+        _decoder.Reset(); // drop any half-codepoint buffered before this seek
     }
 
     private void OnTick(object? _)
@@ -62,6 +69,7 @@ public sealed class ConsoleLogTailer : IDisposable
         }
         catch (Exception ex)
         {
+            if (_disposed) return; // a race with Dispose is not a real read error
             ErrorOccurred?.Invoke(this, ex);
             TryReopen();
         }
@@ -81,6 +89,7 @@ public sealed class ConsoleLogTailer : IDisposable
             _stream.Seek(0, SeekOrigin.Begin);
             _lastPosition = 0;
             _partialLine = "";
+            _decoder.Reset(); // truncation (CS2 restart) discontinues the byte stream
         }
 
         if (currentLength == _lastPosition) return;
@@ -88,17 +97,22 @@ public sealed class ConsoleLogTailer : IDisposable
         _stream.Seek(_lastPosition, SeekOrigin.Begin);
         var toRead = (int)Math.Min(currentLength - _lastPosition, 1 << 20);
         var buffer = ArrayPool<byte>.Shared.Rent(toRead);
+        char[]? charBuffer = null;
         int read;
         string chunk;
         try
         {
             read = _stream.Read(buffer, 0, toRead);
             _lastPosition += read;
-            chunk = Encoding.UTF8.GetString(buffer, 0, read);
+            var charCount = _decoder.GetCharCount(buffer, 0, read, flush: false);
+            charBuffer = ArrayPool<char>.Shared.Rent(charCount == 0 ? 1 : charCount);
+            var produced = _decoder.GetChars(buffer, 0, read, charBuffer, 0, flush: false);
+            chunk = new string(charBuffer, 0, produced);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+            if (charBuffer is not null) ArrayPool<char>.Shared.Return(charBuffer);
         }
 
         var combined = _partialLine + chunk;
@@ -106,7 +120,10 @@ public sealed class ConsoleLogTailer : IDisposable
         var lastNewline = combined.LastIndexOf('\n');
         if (lastNewline < 0)
         {
-            _partialLine = combined;
+            // Bound the accumulator: a newline-free stream (misconfigured/binary file) would
+            // otherwise grow _partialLine without limit and make `combined = _partialLine + chunk`
+            // O(N^2). Real CS2 chat lines are well under this cap; discard and resync on the next '\n'.
+            _partialLine = combined.Length > MaxPartialLine ? "" : combined;
             return;
         }
 
@@ -129,6 +146,7 @@ public sealed class ConsoleLogTailer : IDisposable
 
     private void TryReopen()
     {
+        if (_disposed) return; // never reopen a stream on a disposed instance (handle leak)
         try { OpenAndSeek(); }
         catch { /* next tick will retry */ }
     }
@@ -138,7 +156,13 @@ public sealed class ConsoleLogTailer : IDisposable
         if (_disposed) return;
         _disposed = true;
         _timer.Change(Timeout.Infinite, Timeout.Infinite);
-        _timer.Dispose();
+        // Timer.Dispose(WaitHandle) signals only after any in-flight callback returns, so the
+        // stream is never disposed underneath a running tick (no ObjectDisposedException, no
+        // spurious 'Lesefehler', no reopen-after-dispose handle leak). Deadlock-safe: LineRead/
+        // ErrorOccurred marshal to the UI thread via non-blocking BeginInvoke/Dispatcher.Post,
+        // never a synchronous Invoke that would re-enter this thread.
+        using var done = new ManualResetEvent(false);
+        if (_timer.Dispose(done)) done.WaitOne();
         _stream?.Dispose();
     }
 }

@@ -21,6 +21,10 @@ public static class ChatLineParser
         ["TE"]   = ChatType.T,
     };
 
+    // Span keyed view over TypeMap (same OrdinalIgnoreCase comparer) for an allocation-free prefilter.
+    private static readonly Dictionary<string, ChatType>.AlternateLookup<ReadOnlySpan<char>> TypeLookup =
+        TypeMap.GetAlternateLookup<ReadOnlySpan<char>>();
+
     private static readonly Regex LineRegex = new(
         @"^(?:\d{2}/\d{2}\s\d{2}:\d{2}:\d{2}\s+)?\[(?<type>[^\]]+)\]\s+(?<rest>.+?)\s*$",
         RegexOptions.Compiled);
@@ -36,6 +40,14 @@ public static class ChatLineParser
 
         var bracketIdx = line.IndexOf('[');
         if (bracketIdx < 0 || bracketIdx > 16) return false;
+
+        // Zero-alloc prefilter: console.log is overwhelmingly non-chat ([RenderSystem], [Client], \u2026).
+        // Reject those by the type token before the Replace-chain + regex allocate. The authoritative
+        // TypeMap check below stays, so this only short-circuits lines that would be rejected anyway.
+        var closeIdx = line.IndexOf(']', bracketIdx + 1);
+        if (closeIdx < 0) return false;
+        var typeSpan = line.AsSpan(bracketIdx + 1, closeIdx - bracketIdx - 1).Trim();
+        if (!TypeLookup.ContainsKey(typeSpan)) return false;
 
         var cleaned = line.Replace("\u200E", "").Replace("\u200F", "").TrimEnd('\r', '\n', ' ', '\t');
 
