@@ -4,7 +4,7 @@
        Flows into every project's assembly version; both UIs display it in the status bar
        via AppInfo.DisplayVersion(...). -->
   <PropertyGroup>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
 </Project>
